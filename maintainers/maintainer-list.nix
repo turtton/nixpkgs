@@ -26040,6 +26040,13 @@
     githubId = 303489;
     name = "Manuel Bärenz";
   };
+  turtton = {
+    name = "turtton";
+    email = "tiny.idea1859@turtton.net";
+    github = "turtton";
+    githubId = 39013345;
+    keys = [ { fingerprint = "E271 D44F 0506 7343 9B52  E4A4 8152 FC5D 0B5A 76E1"; } ];
+  };
   tuxinaut = {
     email = "trash4you@tuxinaut.de";
     github = "tuxinaut";
