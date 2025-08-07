@@ -1,26 +1,80 @@
 {
   lib,
-  appimageTools,
-  fetchurl,
+  fetchFromGitHub,
+  stdenvNoCC,
+  yarn-berry_4,
+  nodejs,
+  rustPlatform,
+  openssl,
+  pkg-config,
 }:
 
 let
+  yarn-berry = yarn-berry_4;
   pname = "Jan";
-  version = "0.6.5";
-  src = fetchurl {
-    url = "https://github.com/janhq/jan/releases/download/v${version}/Jan_${version}_amd64.AppImage";
-    hash = "sha256-0JRaefi8mUGoy63BbPa2C8EE/7/TGSsP1VmmWh7Lsko=";
+  version = "0.6.6";
+  src = fetchFromGitHub {
+    owner = "menloresearch";
+    repo = "jan";
+    tag = "v${version}";
+    hash = "sha256-I/8CZAWALyMN7GgVc6i2zaFbhIwXAQLxHSYhu07KutY=";
   };
+  frontend-build = stdenvNoCC.mkDerivation (finalAttrs: {
+    inherit version src;
+    pname = "jan-app";
 
-  appimageContents = appimageTools.extractType2 { inherit pname version src; };
+    missingHashes = ./missing-hashes.json;
+    offlineCache = yarn-berry.fetchYarnBerryDeps {
+      inherit (finalAttrs) src missingHashes;
+      hash = "sha256-SazjmGTae1wvbZKZx/NvbRnWW5IeofmH1hg/DXBO/H8=";
+    };
+    nativeBuildInputs = [
+      yarn-berry
+      yarn-berry.yarnBerryConfigHook
+      nodejs
+    ];
+    yarnBuildScript = "build:web";
+    installPhase = ''
+      cp -r out $out
+    '';
+  });
 in
-appimageTools.wrapType2 {
+rustPlatform.buildRustPackage {
   inherit pname version src;
 
-  extraInstallCommands = ''
-    install -Dm444 ${appimageContents}/Jan.desktop -t $out/share/applications
-    cp -r ${appimageContents}/usr/share/icons $out/share
+  sourceRoot = "${src.name}/src-tauri";
+  cargoLock =
+    let
+      fixupLockFile = path: builtins.readFile path;
+    in
+    {
+      lockFileContents = fixupLockFile ./Cargo.lock;
+      outputHashes = {
+        "fix-path-env-0.0.0" = "sha256-SHJc86sbK2fA48vkVjUpvC5FQoBOno3ylUV5J1b4dAk=";
+      };
+    };
+
+  patches = [
+    ./01-replace-git-deps.patch
+  ];
+
+  postPatch = ''
+    # Insert Cargo.lock
+    ln -s ${./Cargo.lock} Cargo.lock
+
+    # Replace frontend artifact dir
+    mkdir -p frontend-build
+    cp -R ${frontend-build}/dist frontend-build
+
+    substituteInPlace tauri.conf.json --replace '"frontendDist": "../web-app/dist",' '"distDir": "frontend-build/dist",'
   '';
+
+  nativeBuildInputs = [
+    pkg-config
+  ];
+  buildInputs = [
+    openssl
+  ];
 
   meta = {
     changelog = "https://github.com/janhq/jan/releases/tag/v${version}";
@@ -28,7 +82,6 @@ appimageTools.wrapType2 {
     homepage = "https://github.com/janhq/jan";
     license = lib.licenses.agpl3Plus;
     mainProgram = "jan";
-    maintainers = [ ];
-    platforms = with lib.systems.inspect; patternLogicalAnd patterns.isLinux patterns.isx86_64;
+    maintainers = with lib.maintainers; [ turtton ];
   };
 }
